@@ -13,6 +13,7 @@ import io.javalin.http.JavalinResponseWrapper
 import org.eclipse.jetty.server.Request
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.ResourceHandler
+import org.eclipse.jetty.util.resource.EmptyResource
 import org.eclipse.jetty.util.resource.Resource
 import java.io.File
 import javax.servlet.http.HttpServletRequest
@@ -27,14 +28,18 @@ class JettyResourceHandler : io.javalin.http.staticfiles.ResourceHandler {
 
     override fun addStaticFileConfig(config: StaticFileConfig) {
         val handler = if (config.path == "/webjars") WebjarHandler()
-        else if (config.urlPath != "") CustomStaticFileUrl(config.urlPath)
+        else if (config.urlPathPrefix != "") CustomStaticFileUrl(config.urlPathPrefix)
         else ResourceHandler()
         if (handler !is WebjarHandler) {
             handler.apply {
                 resourceBase = getResourcePath(config)
                 isDirAllowed = false
                 isEtags = true
-                Javalin.log?.info("Static file handler added with path=${config.path} and location=${config.location}. Absolute path: '${getResourcePath(config)}'.")
+                if (config.urlPathPrefix == "") {
+                    Javalin.log?.info("Static file handler added with path=${config.path} and location=${config.location}. Absolute path: '${getResourcePath(config)}'.")
+                } else {
+                    Javalin.log?.info("Static file handler added with urlPathPrefix=${config.urlPathPrefix} and path=${config.path} and location=${config.location}. Absolute path: '${getResourcePath(config)}'.")
+                }
             }
         }
         handlers.add(handler.apply {
@@ -47,13 +52,18 @@ class JettyResourceHandler : io.javalin.http.staticfiles.ResourceHandler {
         override fun getResource(path: String) = Resource.newClassPathResource("META-INF/resources$path") ?: super.getResource(path)
     }
 
-    inner class CustomStaticFileUrl(private var customUrlPath: String) : ResourceHandler() {
-        override fun getResource(path: String) = super.getResource(removeCustomUrlPath(path))
-        private fun removeCustomUrlPath(path: String): String {
-            if (path.length > customUrlPath.length && path.subSequence(0, customUrlPath.length) == customUrlPath) {
-                return path.substring(customUrlPath.length)
+    inner class CustomStaticFileUrl(private var customUrlPathPrefix: String) : ResourceHandler() {
+        override fun getResource(path: String): Resource {
+            return if (path.length > customUrlPathPrefix.length && path.subSequence(0, customUrlPathPrefix.length) == customUrlPathPrefix) {
+                val subpath = path.substring(customUrlPathPrefix.length)
+                if (!subpath.startsWith("/")) {
+                    EmptyResource.INSTANCE;
+                } else {
+                    super.getResource(subpath)
+                }
+            } else {
+                EmptyResource.INSTANCE;
             }
-            return path;
         }
     }
 

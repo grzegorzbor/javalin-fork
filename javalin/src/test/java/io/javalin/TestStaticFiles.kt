@@ -38,8 +38,7 @@ class TestStaticFiles {
     private val customUrlStaticResourceApp: Javalin by lazy {
         Javalin.create { servlet ->
             servlet.addStaticFiles("/public")
-            servlet.addStaticFiles("/custom2", "/public", Location.CLASSPATH)
-            servlet.addStaticFiles("/custom1", "/public", Location.CLASSPATH)
+            servlet.addStaticFiles("/custom", "/public", Location.CLASSPATH)
             servlet.addStaticFiles("/f", "/public", Location.CLASSPATH)
         }
     }
@@ -167,10 +166,27 @@ class TestStaticFiles {
     @Test
     fun `serving from custom url path works`() = TestUtil.test(customUrlStaticResourceApp) { _, http ->
         assertThat(http.get("/file").status).isEqualTo(200)
-        assertThat(http.get("/custom1/file").status).isEqualTo(200)
-        assertThat(http.get("/custom2/file").status).isEqualTo(200)
+        assertThat(http.get("/custom/file").status).isEqualTo(200)
         assertThat(http.get("/f/file").status).isEqualTo(200)
-        assertThat(http.get("/custom2custom2/file").status).isEqualTo(404)
-        assertThat(http.get("/custom2/wrongfile").status).isEqualTo(404)
+        assertThat(http.get("/ff/file").status).isEqualTo(404)
+        assertThat(http.get("/custom/custom/file").status).isEqualTo(404)
+        assertThat(http.get("/custom/wrongfile").status).isEqualTo(404)
+    }
+
+    private val customUrlStaticResourceAppWithSubfolderFiltering: Javalin by lazy {
+        Javalin.create { servlet ->
+            // effectively equivalent to:
+            // servlet.addStaticFiles("/public", Location.CLASSPATH)
+            // but with benefit of additional "filtering": only requests matching /assets/* will be matched against static resources handler
+            servlet.addStaticFiles("/assets", "/public/assets", Location.CLASSPATH)
+        }
+    }
+
+    @Test
+    fun `custom config can be used for restricting matching static resources requests to a specific subfolder`() =
+            TestUtil.test(customUrlStaticResourceAppWithSubfolderFiltering) { _, http ->
+        assertThat(http.get("/assets/stylesheet2.css").status).isEqualTo(200) //access to urls matching /assets/* is allowed
+        assertThat(http.get("/stylesheet2.css").status).isEqualTo(404) //direct access to a file in the subfolder is not allowed
+        assertThat(http.get("/styles.css").status).isEqualTo(404) //access to other locations in /public is not allowed
     }
 }
